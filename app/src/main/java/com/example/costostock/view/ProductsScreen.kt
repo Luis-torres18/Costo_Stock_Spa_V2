@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Eco
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -20,7 +21,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.costostock.ProductOffer
+import com.example.costostock.User
+import com.example.costostock.UserType
 import kotlinx.coroutines.delay
 import java.util.UUID
 
@@ -28,12 +32,17 @@ import java.util.UUID
 @Composable
 fun ProductsScreen(
     products: List<ProductOffer>,
+    currentUser: User?,
     onAddToCart: (ProductOffer) -> Unit,
     onAddProduct: (ProductOffer) -> Unit,
+    onEditProduct: (ProductOffer) -> Unit,
     onDeleteProduct: (ProductOffer) -> Unit
 ) {
     var selectedFilter by remember { mutableStateOf("Todos") }
     var showAddDialog by remember { mutableStateOf(false) }
+    var productToEdit by remember { mutableStateOf<ProductOffer?>(null) }
+
+    val canPublish = currentUser != null && (currentUser.type == UserType.SELLER || currentUser.type == UserType.ADMIN)
 
     Scaffold(
         topBar = {
@@ -42,13 +51,15 @@ fun ProductsScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showAddDialog = true },
-                icon = { Icon(Icons.Default.Add, contentDescription = "Agregar") },
-                text = { Text("Nuevo Producto") },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            )
+            if (canPublish) {
+                ExtendedFloatingActionButton(
+                    onClick = { showAddDialog = true },
+                    icon = { Icon(Icons.Default.Add, contentDescription = "Add") },
+                    text = { Text("Nuevo Producto") },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            }
         }
     ) { paddingValues ->
         Column(
@@ -89,9 +100,16 @@ fun ProductsScreen(
                     contentPadding = PaddingValues(top = 4.dp, bottom = 80.dp)
                 ) {
                     items(filteredList, key = { it.id }) { offer ->
+                        val hasManagePermission = currentUser != null && (
+                                currentUser.type == UserType.ADMIN ||
+                                        (currentUser.type == UserType.SELLER && offer.sellerId == currentUser.id)
+                                )
+
                         CatalogCard(
                             offer = offer,
+                            hasManagePermission = hasManagePermission,
                             onAddToCart = { onAddToCart(offer) },
+                            onEdit = { productToEdit = offer },
                             onDelete = { onDeleteProduct(offer) }
                         )
                     }
@@ -101,11 +119,25 @@ fun ProductsScreen(
     }
 
     if (showAddDialog) {
-        AddProductDialog(
+        ProductManageDialog(
+            existingProduct = null,
+            currentUser = currentUser,
             onDismiss = { showAddDialog = false },
             onConfirm = { newProduct ->
                 onAddProduct(newProduct)
                 showAddDialog = false
+            }
+        )
+    }
+
+    if (productToEdit != null) {
+        ProductManageDialog(
+            existingProduct = productToEdit,
+            currentUser = currentUser,
+            onDismiss = { productToEdit = null },
+            onConfirm = { editedProduct ->
+                onEditProduct(editedProduct)
+                productToEdit = null
             }
         )
     }
@@ -114,7 +146,9 @@ fun ProductsScreen(
 @Composable
 fun CatalogCard(
     offer: ProductOffer,
+    hasManagePermission: Boolean,
     onAddToCart: () -> Unit,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     var timeLeft by remember { mutableStateOf(offer.initialSecondsRemaining) }
@@ -153,15 +187,16 @@ fun CatalogCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(36.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Borrar",
-                        tint = MaterialTheme.colorScheme.error
-                    )
+
+                if (hasManagePermission) {
+                    Row {
+                        IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit", tint = MaterialTheme.colorScheme.primary)
+                        }
+                        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                        }
+                    }
                 }
             }
 
@@ -270,46 +305,45 @@ fun CatalogCard(
 }
 
 @Composable
-fun AddProductDialog(
+fun ProductManageDialog(
+    existingProduct: ProductOffer?,
+    currentUser: User?,
     onDismiss: () -> Unit,
     onConfirm: (ProductOffer) -> Unit
 ) {
-    var tipo by remember { mutableStateOf("") }
-    var nombre by remember { mutableStateOf("") }
-    var descripcion by remember { mutableStateOf("") }
-    var valor by remember { mutableStateOf("") }
-    var cantidad by remember { mutableStateOf("") }
-    var errorText by remember { mutableStateOf("") }
+    var categoryInput by remember { mutableStateOf(existingProduct?.category ?: "") }
+    var titleInput by remember { mutableStateOf(existingProduct?.title ?: "") }
+    var descriptionInput by remember { mutableStateOf(existingProduct?.description ?: "") }
+    var priceInput by remember { mutableStateOf(existingProduct?.offerPrice?.toString() ?: "") }
+    var quantityInput by remember { mutableStateOf(existingProduct?.stock?.toString() ?: "") }
+    var errorMessage by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(text = "Plantilla: Nuevo Producto", fontWeight = FontWeight.Bold) },
+        title = { Text(text = if (existingProduct == null) "Nuevo Excedente" else "Editar Producto", fontWeight = FontWeight.Bold) },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedTextField(
-                    value = tipo,
-                    onValueChange = { tipo = it },
+                    value = categoryInput,
+                    onValueChange = { categoryInput = it },
                     label = { Text("Tipo / Categoría") },
-                    placeholder = { Text("Ej: Lácteos, Snacks") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = nombre,
-                    onValueChange = { nombre = it },
+                    value = titleInput,
+                    onValueChange = { titleInput = it },
                     label = { Text("Nombre del producto") },
-                    placeholder = { Text("Ej: Pack Yogur") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = descripcion,
-                    onValueChange = { descripcion = it },
+                    value = descriptionInput,
+                    onValueChange = { descriptionInput = it },
                     label = { Text("Descripción") },
-                    placeholder = { Text("Ej: Próximo a vencer") },
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 2
                 )
@@ -318,28 +352,26 @@ fun AddProductDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = valor,
-                        onValueChange = { if (it.all { c -> c.isDigit() }) valor = it },
+                        value = priceInput,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) priceInput = it },
                         label = { Text("Valor ($)") },
-                        placeholder = { Text("Ej: 1990") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
-                        value = cantidad,
-                        onValueChange = { if (it.all { c -> c.isDigit() }) cantidad = it },
+                        value = quantityInput,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) quantityInput = it },
                         label = { Text("Cantidad") },
-                        placeholder = { Text("Ej: 10") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
                 }
 
-                if (errorText.isNotEmpty()) {
+                if (errorMessage.isNotEmpty()) {
                     Text(
-                        text = errorText,
+                        text = errorMessage,
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -349,20 +381,27 @@ fun AddProductDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (tipo.isBlank() || nombre.isBlank() || descripcion.isBlank() || valor.isBlank() || cantidad.isBlank()) {
-                        errorText = "Por favor completa todos los campos de la plantilla."
+                    if (categoryInput.isBlank() || titleInput.isBlank() || descriptionInput.isBlank() || priceInput.isBlank() || quantityInput.isBlank()) {
+                        errorMessage = "Por favor completa todos los campos."
                     } else {
-                        val parsedPrice = valor.toIntOrNull() ?: 0
-                        val parsedStock = cantidad.toIntOrNull() ?: 1
+                        val parsedPrice = priceInput.toIntOrNull() ?: 0
+                        val parsedStock = quantityInput.toIntOrNull() ?: 1
                         val estimatedOriginalPrice = (parsedPrice * 1.5).toInt()
 
-                        val newOffer = ProductOffer(
+                        val finalOffer = existingProduct?.copy(
+                            title = titleInput.trim(),
+                            description = descriptionInput.trim(),
+                            category = categoryInput.trim(),
+                            offerPrice = parsedPrice,
+                            stock = parsedStock
+                        ) ?: ProductOffer(
                             id = "CS-${UUID.randomUUID().toString().take(5).uppercase()}",
-                            title = nombre.trim(),
-                            description = descripcion.trim(),
-                            category = tipo.trim(),
-                            storeName = "Sucursal Costo Stock Local",
-                            address = "Av. Principal 101",
+                            sellerId = currentUser?.id ?: "VEND-DEFAULT",
+                            title = titleInput.trim(),
+                            description = descriptionInput.trim(),
+                            category = categoryInput.trim(),
+                            storeName = if (currentUser?.type == UserType.SELLER && currentUser.businessName.isNotBlank()) currentUser.businessName else "Sucursal Costo Stock Local",
+                            address = if (currentUser?.type == UserType.SELLER && currentUser.address.isNotBlank()) currentUser.address else "Av. Principal 101",
                             distanceKm = 1.0,
                             originalPrice = estimatedOriginalPrice,
                             offerPrice = parsedPrice,
@@ -370,11 +409,11 @@ fun AddProductDialog(
                             initialSecondsRemaining = 3600L,
                             co2SavedKg = 1.20
                         )
-                        onConfirm(newOffer)
+                        onConfirm(finalOffer)
                     }
                 }
             ) {
-                Text("Guardar Producto")
+                Text(if (existingProduct == null) "Guardar" else "Actualizar")
             }
         },
         dismissButton = {

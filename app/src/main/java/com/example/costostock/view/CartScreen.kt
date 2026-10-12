@@ -62,7 +62,6 @@ fun CartScreen(
         }
     ) { paddingValues ->
         if (generatedVoucher != null) {
-
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -213,7 +212,6 @@ fun CartScreen(
                     .padding(paddingValues)
                     .padding(16.dp)
             ) {
-
                 LazyColumn(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -356,7 +354,7 @@ fun CartItemRow(
                     onClick = onDecrease,
                     modifier = Modifier.size(32.dp)
                 ) {
-                    Icon(Icons.Default.Remove, contentDescription = "Restar", modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Remove, contentDescription = "Decrease", modifier = Modifier.size(16.dp))
                 }
 
                 Text(
@@ -371,7 +369,7 @@ fun CartItemRow(
                     enabled = item.quantity < item.product.stock,
                     modifier = Modifier.size(32.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Sumar", modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Add, contentDescription = "Increase", modifier = Modifier.size(16.dp))
                 }
 
                 Spacer(modifier = Modifier.width(6.dp))
@@ -382,7 +380,7 @@ fun CartItemRow(
                 ) {
                     Icon(
                         imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Quitar ítem",
+                        contentDescription = "Remove item",
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(20.dp)
                     )

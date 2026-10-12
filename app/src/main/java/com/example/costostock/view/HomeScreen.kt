@@ -6,8 +6,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AddShoppingCart
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Eco
+import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
@@ -23,12 +26,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.costostock.ProductOffer
 import com.example.costostock.R
+import com.example.costostock.User
+import com.example.costostock.UserType
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     products: List<ProductOffer>,
+    currentUser: User?,
+    onOpenAuth: () -> Unit,
+    onLogout: () -> Unit,
+    onOpenAdminPanel: () -> Unit,
     onAddToCart: (ProductOffer) -> Unit
 ) {
     val onSaleProducts = remember(products) {
@@ -44,8 +53,26 @@ fun HomeScreen(
                         contentDescription = "Logo Costo Stock",
                         modifier = Modifier
                             .height(34.dp)
-                            .fillMaxWidth(0.65f)
+                            .fillMaxWidth(0.55f)
                     )
+                },
+                actions = {
+                    if (currentUser == null) {
+                        IconButton(onClick = onOpenAuth) {
+                            Icon(Icons.Default.AccountCircle, contentDescription = "Login", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (currentUser.type == UserType.ADMIN) {
+                                IconButton(onClick = onOpenAdminPanel) {
+                                    Icon(Icons.Default.AdminPanelSettings, contentDescription = "Admin Panel", tint = Color(0xFFE65100))
+                                }
+                            }
+                            IconButton(onClick = onLogout) {
+                                Icon(Icons.Default.ExitToApp, contentDescription = "Logout", tint = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
                 }
             )
         }
@@ -56,11 +83,28 @@ fun HomeScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
+            if (currentUser != null) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                ) {
+                    Text(
+                        text = "Hola, ${currentUser.fullName} (${currentUser.type.name.lowercase().capitalize()})",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 12.dp, bottom = 8.dp),
+                    .padding(top = 10.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
@@ -137,7 +181,6 @@ fun HomeOfferCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -256,7 +299,6 @@ fun HomeOfferCard(
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-
 
             Button(
                 onClick = onAddToCart,
