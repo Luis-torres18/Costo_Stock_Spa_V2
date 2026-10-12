@@ -6,8 +6,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
@@ -16,7 +18,6 @@ import androidx.compose.material.icons.filled.Eco
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
-import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,7 +36,7 @@ import coil.compose.AsyncImage
 import com.example.costostock.ProductOffer
 import com.example.costostock.User
 import com.example.costostock.UserType
-import kotlinx.coroutines.delay
+import com.example.costostock.formatPrice
 import java.io.File
 import java.util.UUID
 
@@ -162,19 +163,6 @@ fun CatalogCard(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
-    var timeLeft by remember { mutableStateOf(offer.initialSecondsRemaining) }
-
-    LaunchedEffect(key1 = offer.id) {
-        while (timeLeft > 0) {
-            delay(1000L)
-            timeLeft--
-        }
-    }
-
-    val hours = timeLeft / 3600
-    val minutes = (timeLeft % 3600) / 60
-    val seconds = timeLeft % 60
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
@@ -209,6 +197,11 @@ fun CatalogCard(
                         text = "Tipo: ${offer.category} • ${offer.storeName}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Punto de retiro: ${offer.address}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 
@@ -246,14 +239,14 @@ fun CatalogCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "$${offer.offerPrice}",
+                        text = formatPrice(offer.offerPrice),
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    if (offer.originalPrice > offer.offerPrice) {
+                    if (offer.isOfferActive && offer.originalPrice > offer.offerPrice) {
                         Text(
-                            text = "$${offer.originalPrice}",
+                            text = formatPrice(offer.originalPrice),
                             style = MaterialTheme.typography.bodyMedium,
                             textDecoration = TextDecoration.LineThrough,
                             color = MaterialTheme.colorScheme.outline
@@ -262,14 +255,14 @@ fun CatalogCard(
                 }
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer
+                    color = if (offer.stock > 0) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer
                 ) {
                     Text(
-                        text = "${offer.stock} disp.",
+                        text = if (offer.stock > 0) "${offer.stock} disp." else "Agotado",
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        color = if (offer.stock > 0) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.error
                     )
                 }
             }
@@ -281,21 +274,27 @@ fun CatalogCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Default.Timer,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
+                if (offer.isOfferActive) {
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = MaterialTheme.colorScheme.errorContainer
+                    ) {
+                        Text(
+                            text = "¡En Oferta Destacada!",
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
                     Text(
-                        text = String.format("%02d:%02d:%02d", hours, minutes, seconds),
+                        text = "Precio Estándar",
                         style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.error
+                        color = MaterialTheme.colorScheme.outline
                     )
                 }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Default.Eco,
@@ -317,12 +316,13 @@ fun CatalogCard(
 
             Button(
                 onClick = onAddToCart,
+                enabled = offer.stock > 0,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp)
             ) {
                 Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Añadir al Carrito")
+                Text(if (offer.stock > 0) "Añadir al Carrito" else "Sin Stock Disponible")
             }
         }
     }
@@ -340,18 +340,26 @@ fun ProductManageDialog(
     var categoryInput by remember { mutableStateOf(existingProduct?.category ?: "") }
     var titleInput by remember { mutableStateOf(existingProduct?.title ?: "") }
     var descriptionInput by remember { mutableStateOf(existingProduct?.description ?: "") }
-    var priceInput by remember { mutableStateOf(existingProduct?.offerPrice?.toString() ?: "") }
+    var regularPriceInput by remember { mutableStateOf(existingProduct?.originalPrice?.toString() ?: "") }
     var quantityInput by remember { mutableStateOf(existingProduct?.stock?.toString() ?: "") }
     var selectedImageUri by remember { mutableStateOf<Uri?>(existingProduct?.imageUri?.takeIf { it.isNotBlank() }?.let { Uri.parse(it) }) }
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
+
+    var enableOfferSection by remember { mutableStateOf(existingProduct?.isOfferActive ?: false) }
+    var offerPriceInput by remember { mutableStateOf(existingProduct?.offerPrice?.takeIf { existingProduct.isOfferActive }?.toString() ?: "") }
+    var offerMinutesInput by remember {
+        mutableStateOf(
+            if (existingProduct != null && existingProduct.initialSecondsRemaining > 0) {
+                (existingProduct.initialSecondsRemaining / 60).toString()
+            } else "60"
+        )
+    }
     var errorMessage by remember { mutableStateOf("") }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        if (uri != null) {
-            selectedImageUri = uri
-        }
+        if (uri != null) selectedImageUri = uri
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(
@@ -374,16 +382,18 @@ fun ProductManageDialog(
         title = { Text(text = if (existingProduct == null) "Nuevo Excedente" else "Editar Producto", fontWeight = FontWeight.Bold) },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 if (selectedImageUri != null) {
                     AsyncImage(
                         model = selectedImageUri,
-                        contentDescription = "Previsualización",
+                        contentDescription = "Preview",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(130.dp)
+                            .height(120.dp)
                             .clip(RoundedCornerShape(8.dp)),
                         contentScale = ContentScale.Crop
                     )
@@ -397,7 +407,7 @@ fun ProductManageDialog(
                         onClick = { prepareCameraAndLaunch() },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Cámara", fontSize = 12.sp)
                     }
@@ -406,7 +416,7 @@ fun ProductManageDialog(
                         onClick = { galleryLauncher.launch("image/*") },
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.PhotoLibrary, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Galería", fontSize = 12.sp)
                     }
@@ -438,9 +448,10 @@ fun ProductManageDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
-                        value = priceInput,
-                        onValueChange = { if (it.all { c -> c.isDigit() }) priceInput = it },
-                        label = { Text("Valor ($)") },
+                        value = regularPriceInput,
+                        onValueChange = { if (it.all { c -> c.isDigit() }) regularPriceInput = it },
+                        label = { Text("Precio Regular ($)") },
+                        placeholder = { Text("Ej: 10000") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.weight(1f)
@@ -448,11 +459,103 @@ fun ProductManageDialog(
                     OutlinedTextField(
                         value = quantityInput,
                         onValueChange = { if (it.all { c -> c.isDigit() }) quantityInput = it },
-                        label = { Text("Cantidad") },
+                        label = { Text("Cantidad / Stock") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
                         modifier = Modifier.weight(1f)
                     )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = "📍 Dirección de retiro (Automática del vendedor):",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = if (currentUser?.address?.isNotBlank() == true) currentUser.address else "Av. Pedro Montt 1820, Valparaíso",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                if (existingProduct != null) {
+                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Poner en Oferta Destacada",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Switch(
+                            checked = enableOfferSection,
+                            onCheckedChange = { enableOfferSection = it }
+                        )
+                    }
+
+                    if (enableOfferSection) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = offerPriceInput,
+                                    onValueChange = { if (it.all { c -> c.isDigit() }) offerPriceInput = it },
+                                    label = { Text("Precio en Oferta ($)") },
+                                    placeholder = { Text("Menor al regular") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                OutlinedTextField(
+                                    value = offerMinutesInput,
+                                    onValueChange = { if (it.all { c -> c.isDigit() }) offerMinutesInput = it },
+                                    label = { Text("Duración de oferta (en minutos)") },
+                                    placeholder = { Text("Ej: 60 = 1 hr, 120 = 2 hrs") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                val mins = offerMinutesInput.toLongOrNull() ?: 0L
+                                val hoursCalc = mins / 60
+                                val minsRest = mins % 60
+                                val tiempoTexto = if (hoursCalc > 0) "${hoursCalc}h ${minsRest}m" else "${minsRest} min"
+
+                                Text(
+                                    text = "⏱️ Tiempo configurado: $mins minutos ($tiempoTexto)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+
+                                val regP = regularPriceInput.toIntOrNull() ?: 0
+                                val offP = offerPriceInput.toIntOrNull() ?: 0
+                                if (regP > 0 && offP > 0 && offP < regP) {
+                                    val disc = ((1.0 - (offP.toDouble() / regP)) * 100).toInt()
+                                    Text(
+                                        text = "🏷️ Descuento calculado: -$disc% (Precio final: ${formatPrice(offP)})",
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
 
                 if (errorMessage.isNotEmpty()) {
@@ -467,19 +570,34 @@ fun ProductManageDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    if (categoryInput.isBlank() || titleInput.isBlank() || descriptionInput.isBlank() || priceInput.isBlank() || quantityInput.isBlank()) {
-                        errorMessage = "Por favor completa todos los campos."
+                    val parsedRegPrice = regularPriceInput.toIntOrNull() ?: 0
+                    val parsedStock = quantityInput.toIntOrNull() ?: 1
+
+                    if (categoryInput.isBlank() || titleInput.isBlank() || descriptionInput.isBlank() || regularPriceInput.isBlank() || quantityInput.isBlank()) {
+                        errorMessage = "Por favor completa todos los campos principales."
+                    } else if (enableOfferSection && ((offerPriceInput.toIntOrNull() ?: 0) >= parsedRegPrice || (offerPriceInput.toIntOrNull() ?: 0) <= 0)) {
+                        errorMessage = "El precio de oferta debe ser mayor a 0 y menor que el precio regular."
+                    } else if (enableOfferSection && (offerMinutesInput.toLongOrNull() ?: 0L) <= 0L) {
+                        errorMessage = "Ingresa una cantidad de minutos válida mayor a 0."
                     } else {
-                        val parsedPrice = priceInput.toIntOrNull() ?: 0
-                        val parsedStock = quantityInput.toIntOrNull() ?: 1
-                        val estimatedOriginalPrice = (parsedPrice * 1.5).toInt()
+                        val isOffer = enableOfferSection
+                        val finalOfferPrice = if (isOffer) (offerPriceInput.toIntOrNull() ?: parsedRegPrice) else parsedRegPrice
+                        val durationSeconds = if (isOffer) ((offerMinutesInput.toLongOrNull() ?: 60L) * 60L) else 0L
+
+                        val sellerStore = if (currentUser?.businessName?.isNotBlank() == true) currentUser.businessName else (existingProduct?.storeName ?: "Sucursal Local")
+                        val sellerAddr = if (currentUser?.address?.isNotBlank() == true) currentUser.address else (existingProduct?.address ?: "Av. Principal 101, Valparaíso")
 
                         val finalOffer = existingProduct?.copy(
                             title = titleInput.trim(),
                             description = descriptionInput.trim(),
                             category = categoryInput.trim(),
-                            offerPrice = parsedPrice,
+                            storeName = sellerStore,
+                            address = sellerAddr,
+                            originalPrice = parsedRegPrice,
+                            offerPrice = finalOfferPrice,
                             stock = parsedStock,
+                            initialSecondsRemaining = durationSeconds,
+                            isOfferActive = isOffer,
                             imageUri = selectedImageUri?.toString() ?: existingProduct.imageUri
                         ) ?: ProductOffer(
                             id = "CS-${UUID.randomUUID().toString().take(5).uppercase()}",
@@ -487,15 +605,16 @@ fun ProductManageDialog(
                             title = titleInput.trim(),
                             description = descriptionInput.trim(),
                             category = categoryInput.trim(),
-                            storeName = if (currentUser?.type == UserType.SELLER && currentUser.businessName.isNotBlank()) currentUser.businessName else "Sucursal Costo Stock Local",
-                            address = if (currentUser?.type == UserType.SELLER && currentUser.address.isNotBlank()) currentUser.address else "Av. Principal 101",
+                            storeName = sellerStore,
+                            address = sellerAddr,
                             distanceKm = 1.0,
-                            originalPrice = estimatedOriginalPrice,
-                            offerPrice = parsedPrice,
+                            originalPrice = parsedRegPrice,
+                            offerPrice = parsedRegPrice,
                             stock = parsedStock,
-                            initialSecondsRemaining = 3600L,
+                            initialSecondsRemaining = 0L,
                             co2SavedKg = 1.20,
-                            imageUri = selectedImageUri?.toString() ?: ""
+                            imageUri = selectedImageUri?.toString() ?: "",
+                            isOfferActive = false
                         )
                         onConfirm(finalOffer)
                     }
