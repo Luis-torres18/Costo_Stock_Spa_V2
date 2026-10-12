@@ -17,17 +17,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.costostock.ProductOffer
 import com.example.costostock.R
 import com.example.costostock.User
 import com.example.costostock.UserType
+import com.example.costostock.formatPrice
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,10 +42,11 @@ fun HomeScreen(
     onOpenAuth: () -> Unit,
     onLogout: () -> Unit,
     onOpenAdminPanel: () -> Unit,
-    onAddToCart: (ProductOffer) -> Unit
+    onAddToCart: (ProductOffer) -> Unit,
+    onOfferExpired: (ProductOffer) -> Unit
 ) {
-    val onSaleProducts = remember(products) {
-        products.filter { it.offerPrice < it.originalPrice }
+    val onSaleProducts = remember(products.map { "${it.id}-${it.isOfferActive}-${it.offerPrice}-${it.stock}" }) {
+        products.filter { it.isOfferActive && it.offerPrice < it.originalPrice }
     }
 
     Scaffold(
@@ -142,7 +147,8 @@ fun HomeScreen(
                     items(onSaleProducts, key = { it.id }) { offer ->
                         HomeOfferCard(
                             offer = offer,
-                            onAddToCart = { onAddToCart(offer) }
+                            onAddToCart = { onAddToCart(offer) },
+                            onExpire = { onOfferExpired(offer) }
                         )
                     }
                 }
@@ -154,21 +160,28 @@ fun HomeScreen(
 @Composable
 fun HomeOfferCard(
     offer: ProductOffer,
-    onAddToCart: () -> Unit
+    onAddToCart: () -> Unit,
+    onExpire: () -> Unit
 ) {
     var timeLeft by remember { mutableStateOf(offer.initialSecondsRemaining) }
 
-    LaunchedEffect(key1 = offer.id) {
+    LaunchedEffect(key1 = offer.id, key2 = offer.initialSecondsRemaining) {
+        timeLeft = offer.initialSecondsRemaining
         while (timeLeft > 0) {
             delay(1000L)
             timeLeft--
+        }
+        if (timeLeft <= 0) {
+            onExpire()
         }
     }
 
     val hours = timeLeft / 3600
     val minutes = (timeLeft % 3600) / 60
     val seconds = timeLeft % 60
-    val discountPct = ((1.0 - (offer.offerPrice.toDouble() / offer.originalPrice)) * 100).toInt()
+    val discountPct = if (offer.originalPrice > 0) {
+        ((1.0 - (offer.offerPrice.toDouble() / offer.originalPrice)) * 100).toInt().coerceAtLeast(1)
+    } else 0
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -181,6 +194,19 @@ fun HomeOfferCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
+            if (offer.imageUri.isNotBlank()) {
+                AsyncImage(
+                    model = offer.imageUri,
+                    contentDescription = offer.title,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(150.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    contentScale = ContentScale.Crop
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -232,13 +258,13 @@ fun HomeOfferCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "$${offer.offerPrice}",
+                        text = formatPrice(offer.offerPrice),
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "$${offer.originalPrice}",
+                        text = formatPrice(offer.originalPrice),
                         style = MaterialTheme.typography.bodyMedium,
                         textDecoration = TextDecoration.LineThrough,
                         color = MaterialTheme.colorScheme.outline
@@ -246,14 +272,14 @@ fun HomeOfferCard(
                 }
                 Surface(
                     shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer
+                    color = if (offer.stock > 0) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.errorContainer
                 ) {
                     Text(
-                        text = "${offer.stock} disp.",
+                        text = if (offer.stock > 0) "${offer.stock} disp." else "Agotado",
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        color = if (offer.stock > 0) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.error
                     )
                 }
             }
@@ -302,6 +328,7 @@ fun HomeOfferCard(
 
             Button(
                 onClick = onAddToCart,
+                enabled = offer.stock > 0,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(44.dp),
@@ -314,7 +341,7 @@ fun HomeOfferCard(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Añadir al Carrito",
+                    text = if (offer.stock > 0) "Añadir al Carrito" else "Sin Stock Disponible",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp
                 )

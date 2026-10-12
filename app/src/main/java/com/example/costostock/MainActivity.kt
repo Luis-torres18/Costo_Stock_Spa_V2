@@ -6,8 +6,6 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Store
@@ -16,6 +14,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.example.costostock.ui.theme.CostoStockTheme
 import com.example.costostock.view.*
+import java.text.NumberFormat
+import java.util.Locale
+
+// Formato de moneda con punto (CLP: $10.000)
+fun formatPrice(amount: Int): String {
+    val formatter = NumberFormat.getNumberInstance(Locale("es", "CL"))
+    return "$" + formatter.format(amount)
+}
 
 enum class UserType {
     BUYER,
@@ -54,10 +60,12 @@ data class ProductOffer(
     val address: String,
     val distanceKm: Double,
     val originalPrice: Int,
-    val offerPrice: Int,
+    var offerPrice: Int,
     var stock: Int,
-    val initialSecondsRemaining: Long,
-    val co2SavedKg: Double
+    var initialSecondsRemaining: Long,
+    val co2SavedKg: Double,
+    val imageUri: String = "",
+    var isOfferActive: Boolean = false
 )
 
 data class CartItem(
@@ -67,6 +75,9 @@ data class CartItem(
 
 data class PurchaseVoucher(
     val voucherCode: String,
+    val buyerName: String,
+    val buyerEmail: String,
+    val buyerPhone: String,
     val items: List<CartItem>,
     val purchaseDate: String,
     val totalPaid: Int,
@@ -82,7 +93,7 @@ class MainActivity : ComponentActivity() {
                     mutableStateListOf(
                         User(
                             id = "USR-ADMIN",
-                            fullName = "Costo Stock Administrator",
+                            fullName = "Administrador Costo Stock",
                             phone = "+56911223344",
                             email = "admin@costostock.cl",
                             password = "admin123",
@@ -97,9 +108,20 @@ class MainActivity : ComponentActivity() {
                             password = "vendedor123",
                             type = UserType.SELLER,
                             status = AccountStatus.ACTIVE,
-                            address = "Av. Pedro Montt 1820",
+                            address = "Av. Pedro Montt 1820, Valparaíso",
+                            website = "https://centralvalpo.cl",
+                            socialMedia = "@centralvalpo_oficial",
                             businessName = "Supermercado Central Valparaíso",
                             businessType = "Abarrotes y Alimentos"
+                        ),
+                        User(
+                            id = "BUY-001",
+                            fullName = "Camila Soto",
+                            phone = "+56977665544",
+                            email = "comprador@costostock.cl",
+                            password = "comprador123",
+                            type = UserType.BUYER,
+                            status = AccountStatus.ACTIVE
                         )
                     )
                 }
@@ -117,13 +139,15 @@ class MainActivity : ComponentActivity() {
                             description = "Lote refrigerado en óptimo estado, vencimiento a 5 días.",
                             category = "Lácteos",
                             storeName = "Supermercado Central Valparaíso",
-                            address = "Av. Pedro Montt 1820",
+                            address = "Av. Pedro Montt 1820, Valparaíso",
                             distanceKm = 0.8,
                             originalPrice = 4990,
                             offerPrice = 1990,
                             stock = 8,
                             initialSecondsRemaining = 3600L,
-                            co2SavedKg = 1.45
+                            co2SavedKg = 1.45,
+                            imageUri = "https://images.unsplash.com/photo-1488477181946-6428a0291777?auto=format&fit=crop&w=600&q=80",
+                            isOfferActive = true
                         ),
                         ProductOffer(
                             id = "CS-002",
@@ -131,14 +155,16 @@ class MainActivity : ComponentActivity() {
                             title = "Caja Galletas Avena & Miel 400g",
                             description = "Excedente de temporada con empaque intacto.",
                             category = "Snacks",
-                            storeName = "EcoMarket Viña del Mar",
-                            address = "Calle Valparaíso 650",
+                            storeName = "Supermercado Central Valparaíso",
+                            address = "Av. Pedro Montt 1820, Valparaíso",
                             distanceKm = 1.6,
                             originalPrice = 3290,
                             offerPrice = 1290,
                             stock = 4,
                             initialSecondsRemaining = 1800L,
-                            co2SavedKg = 0.85
+                            co2SavedKg = 0.85,
+                            imageUri = "https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=600&q=80",
+                            isOfferActive = true
                         ),
                         ProductOffer(
                             id = "CS-003",
@@ -147,13 +173,15 @@ class MainActivity : ComponentActivity() {
                             description = "Corte laminado al vacío, conservación en frío.",
                             category = "Lácteos",
                             storeName = "Distribuidora Costa",
-                            address = "Av. Libertad 340",
+                            address = "Av. Libertad 340, Viña del Mar",
                             distanceKm = 2.3,
                             originalPrice = 5890,
-                            offerPrice = 2790,
+                            offerPrice = 5890,
                             stock = 12,
-                            initialSecondsRemaining = 7200L,
-                            co2SavedKg = 2.30
+                            initialSecondsRemaining = 0L,
+                            co2SavedKg = 2.30,
+                            imageUri = "https://images.unsplash.com/photo-1624806992066-5ffcf7ca186b?auto=format&fit=crop&w=600&q=80",
+                            isOfferActive = false
                         )
                     )
                 }
@@ -161,16 +189,63 @@ class MainActivity : ComponentActivity() {
                 val cartItems = remember { mutableStateListOf<CartItem>() }
                 var currentTab by remember { mutableStateOf(0) }
 
+                // Lógica de Reserva dinámica de Stock
                 fun addToCart(product: ProductOffer) {
-                    val existingIndex = cartItems.indexOfFirst { it.product.id == product.id }
-                    if (existingIndex >= 0) {
-                        val currentItem = cartItems[existingIndex]
-                        if (currentItem.quantity < product.stock) {
-                            cartItems[existingIndex] = currentItem.copy(quantity = currentItem.quantity + 1)
+                    val pIndex = productsList.indexOfFirst { it.id == product.id }
+                    if (pIndex >= 0 && productsList[pIndex].stock > 0) {
+                        productsList[pIndex] = productsList[pIndex].copy(stock = productsList[pIndex].stock - 1)
+                        val existingCartIdx = cartItems.indexOfFirst { it.product.id == product.id }
+                        if (existingCartIdx >= 0) {
+                            val cur = cartItems[existingCartIdx]
+                            cartItems[existingCartIdx] = cur.copy(quantity = cur.quantity + 1)
+                        } else {
+                            cartItems.add(CartItem(product = productsList[pIndex], quantity = 1))
                         }
-                    } else {
-                        cartItems.add(CartItem(product = product, quantity = 1))
                     }
+                }
+
+                fun increaseCartQuantity(item: CartItem) {
+                    val pIndex = productsList.indexOfFirst { it.id == item.product.id }
+                    if (pIndex >= 0 && productsList[pIndex].stock > 0) {
+                        productsList[pIndex] = productsList[pIndex].copy(stock = productsList[pIndex].stock - 1)
+                        val cIndex = cartItems.indexOf(item)
+                        if (cIndex >= 0) {
+                            cartItems[cIndex] = item.copy(quantity = item.quantity + 1)
+                        }
+                    }
+                }
+
+                fun decreaseCartQuantity(item: CartItem) {
+                    val pIndex = productsList.indexOfFirst { it.id == item.product.id }
+                    if (pIndex >= 0) {
+                        productsList[pIndex] = productsList[pIndex].copy(stock = productsList[pIndex].stock + 1)
+                    }
+                    val cIndex = cartItems.indexOf(item)
+                    if (cIndex >= 0) {
+                        if (item.quantity > 1) {
+                            cartItems[cIndex] = item.copy(quantity = item.quantity - 1)
+                        } else {
+                            cartItems.removeAt(cIndex)
+                        }
+                    }
+                }
+
+                fun removeCartItem(item: CartItem) {
+                    val pIndex = productsList.indexOfFirst { it.id == item.product.id }
+                    if (pIndex >= 0) {
+                        productsList[pIndex] = productsList[pIndex].copy(stock = productsList[pIndex].stock + item.quantity)
+                    }
+                    cartItems.remove(item)
+                }
+
+                fun clearCart() {
+                    cartItems.forEach { item ->
+                        val pIndex = productsList.indexOfFirst { it.id == item.product.id }
+                        if (pIndex >= 0) {
+                            productsList[pIndex] = productsList[pIndex].copy(stock = productsList[pIndex].stock + item.quantity)
+                        }
+                    }
+                    cartItems.clear()
                 }
 
                 if (showAuthScreen) {
@@ -246,7 +321,13 @@ class MainActivity : ComponentActivity() {
                                     onOpenAuth = { showAuthScreen = true },
                                     onLogout = { currentUser = null },
                                     onOpenAdminPanel = { showAdminPanel = true },
-                                    onAddToCart = { product -> addToCart(product) }
+                                    onAddToCart = { product -> addToCart(product) },
+                                    onOfferExpired = { expiredOffer ->
+                                        val idx = productsList.indexOfFirst { it.id == expiredOffer.id }
+                                        if (idx >= 0) {
+                                            productsList[idx] = expiredOffer.copy(isOfferActive = false)
+                                        }
+                                    }
                                 )
                                 1 -> ProductsScreen(
                                     products = productsList,
@@ -264,24 +345,14 @@ class MainActivity : ComponentActivity() {
                                 )
                                 2 -> CartScreen(
                                     cartItems = cartItems,
-                                    onIncreaseQuantity = { item ->
-                                        val index = cartItems.indexOf(item)
-                                        if (index >= 0 && item.quantity < item.product.stock) {
-                                            cartItems[index] = item.copy(quantity = item.quantity + 1)
-                                        }
+                                    currentUser = currentUser,
+                                    onIncreaseQuantity = { item -> increaseCartQuantity(item) },
+                                    onDecreaseQuantity = { item -> decreaseCartQuantity(item) },
+                                    onRemoveItem = { item -> removeCartItem(item) },
+                                    onClearCart = { clearCart() },
+                                    onCheckoutCompleted = {
+                                        cartItems.clear()
                                     },
-                                    onDecreaseQuantity = { item ->
-                                        val index = cartItems.indexOf(item)
-                                        if (index >= 0) {
-                                            if (item.quantity > 1) {
-                                                cartItems[index] = item.copy(quantity = item.quantity - 1)
-                                            } else {
-                                                cartItems.removeAt(index)
-                                            }
-                                        }
-                                    },
-                                    onRemoveItem = { item -> cartItems.remove(item) },
-                                    onClearCart = { cartItems.clear() },
                                     onGoToProducts = { currentTab = 1 }
                                 )
                             }

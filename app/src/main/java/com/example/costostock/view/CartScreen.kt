@@ -10,6 +10,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.ShoppingCartCheckout
@@ -24,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.costostock.CartItem
 import com.example.costostock.PurchaseVoucher
+import com.example.costostock.User
+import com.example.costostock.formatPrice
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -31,10 +35,12 @@ import java.util.*
 @Composable
 fun CartScreen(
     cartItems: List<CartItem>,
+    currentUser: User?,
     onIncreaseQuantity: (CartItem) -> Unit,
     onDecreaseQuantity: (CartItem) -> Unit,
     onRemoveItem: (CartItem) -> Unit,
     onClearCart: () -> Unit,
+    onCheckoutCompleted: () -> Unit,
     onGoToProducts: () -> Unit
 ) {
     var generatedVoucher by remember { mutableStateOf<PurchaseVoucher?>(null) }
@@ -88,12 +94,12 @@ fun CartScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "¡Voucher de Compra Emitido!",
+                            text = "¡Voucher de Retiro Oficial!",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Presenta este código en los puntos de retiro",
+                            text = "Preséntalo en el local para validar tu compra",
                             style = MaterialTheme.typography.bodySmall
                         )
 
@@ -121,27 +127,59 @@ fun CartScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Person, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Datos del Comprador:",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                            Text(text = "Nombre: ${generatedVoucher!!.buyerName}", style = MaterialTheme.typography.bodySmall)
+                            Text(text = "Correo: ${generatedVoucher!!.buyerEmail}", style = MaterialTheme.typography.bodySmall)
+                            Text(text = "Teléfono: ${generatedVoucher!!.buyerPhone}", style = MaterialTheme.typography.bodySmall)
+
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Divider()
+                            Spacer(modifier = Modifier.height(8.dp))
+
                             Text(
-                                text = "Detalle de Productos Rescatados:",
+                                text = "Lotes y Puntos de Retiro:",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             generatedVoucher!!.items.forEach { item ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 2.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = "${item.quantity}x ${item.product.title}",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        text = "$${item.product.offerPrice * item.quantity}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
+                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "${item.quantity}x ${item.product.title}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = formatPrice(item.product.offerPrice * item.quantity),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.LocationOn,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "${item.product.storeName} - ${item.product.address}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                 }
                             }
 
@@ -150,13 +188,13 @@ fun CartScreen(
                             Spacer(modifier = Modifier.height(8.dp))
 
                             Text(
-                                text = "Total Pagado: $${generatedVoucher!!.totalPaid}",
+                                text = "Total Pagado: ${formatPrice(generatedVoucher!!.totalPaid)}",
                                 fontWeight = FontWeight.Bold,
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Text(text = "Fecha: ${generatedVoucher!!.purchaseDate}", style = MaterialTheme.typography.bodySmall)
 
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
 
                             Text(
                                 text = "🌱 Huella de CO₂ evitada total: ${String.format(Locale.US, "%.2f", generatedVoucher!!.totalCo2Saved)} kg",
@@ -170,7 +208,7 @@ fun CartScreen(
                         Button(
                             onClick = {
                                 generatedVoucher = null
-                                onClearCart()
+                                onCheckoutCompleted()
                                 onGoToProducts()
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -270,7 +308,7 @@ fun CartScreen(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "$$totalAmount",
+                                text = formatPrice(totalAmount),
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -285,8 +323,15 @@ fun CartScreen(
                                 val now = dateFormat.format(Date())
                                 val randomCode = "CS-" + UUID.randomUUID().toString().take(8).uppercase()
 
+                                val buyerName = currentUser?.fullName ?: "Comprador Invitado"
+                                val buyerEmail = currentUser?.email ?: "cliente@costostock.cl"
+                                val buyerPhone = currentUser?.phone ?: "+56 9 0000 0000"
+
                                 generatedVoucher = PurchaseVoucher(
                                     voucherCode = randomCode,
+                                    buyerName = buyerName,
+                                    buyerEmail = buyerEmail,
+                                    buyerPhone = buyerPhone,
                                     items = cartItems.toList(),
                                     purchaseDate = now,
                                     totalPaid = totalAmount,
@@ -334,12 +379,17 @@ fun CartItemRow(
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
-                    text = "$${item.product.offerPrice} c/u  •  Máx disp: ${item.product.stock}",
+                    text = "${formatPrice(item.product.offerPrice)} c/u  •  Stock remanente: ${item.product.stock}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Subtotal: $${item.product.offerPrice * item.quantity}",
+                    text = "Retiro: ${item.product.address}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Subtotal: ${formatPrice(item.product.offerPrice * item.quantity)}",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary
@@ -366,7 +416,7 @@ fun CartItemRow(
 
                 FilledTonalIconButton(
                     onClick = onIncrease,
-                    enabled = item.quantity < item.product.stock,
+                    enabled = item.product.stock > 0,
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = "Increase", modifier = Modifier.size(16.dp))
