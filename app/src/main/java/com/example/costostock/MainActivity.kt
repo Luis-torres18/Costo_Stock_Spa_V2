@@ -57,7 +57,8 @@ data class ProductOffer(
     val offerPrice: Int,
     var stock: Int,
     val initialSecondsRemaining: Long,
-    val co2SavedKg: Double
+    val co2SavedKg: Double,
+    val imageUri: String = ""
 )
 
 data class CartItem(
@@ -123,7 +124,8 @@ class MainActivity : ComponentActivity() {
                             offerPrice = 1990,
                             stock = 8,
                             initialSecondsRemaining = 3600L,
-                            co2SavedKg = 1.45
+                            co2SavedKg = 1.45,
+                            imageUri = ""
                         ),
                         ProductOffer(
                             id = "CS-002",
@@ -138,7 +140,8 @@ class MainActivity : ComponentActivity() {
                             offerPrice = 1290,
                             stock = 4,
                             initialSecondsRemaining = 1800L,
-                            co2SavedKg = 0.85
+                            co2SavedKg = 0.85,
+                            imageUri = ""
                         ),
                         ProductOffer(
                             id = "CS-003",
@@ -153,7 +156,8 @@ class MainActivity : ComponentActivity() {
                             offerPrice = 2790,
                             stock = 12,
                             initialSecondsRemaining = 7200L,
-                            co2SavedKg = 2.30
+                            co2SavedKg = 2.30,
+                            imageUri = ""
                         )
                     )
                 }
